@@ -1,0 +1,57 @@
+# Runs on every pull request and on main. A PR can only merge when this passes
+# (once branch protection is on). Steps skip themselves until the project has the
+# matching files, so the workflow works from day one and grows with the code.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- JavaScript / TypeScript ---
+      - uses: actions/setup-node@v4
+        if: hashFiles('package.json') != ''
+        with:
+          node-version: 22
+      - name: Install
+        if: hashFiles('package.json') != ''
+        run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Lint
+        if: hashFiles('package.json') != ''
+        run: npm run lint --if-present
+      - name: Typecheck
+        if: hashFiles('package.json') != ''
+        run: npm run typecheck --if-present
+      - name: Test
+        if: hashFiles('package.json') != ''
+        run: npm run test --if-present
+      - name: Build
+        if: hashFiles('package.json') != ''
+        run: npm run build --if-present
+
+      # --- Python ---
+      - uses: actions/setup-python@v5
+        if: hashFiles('requirements.txt', 'pyproject.toml') != ''
+        with:
+          python-version: '3.12'
+      - name: Python tests
+        if: hashFiles('requirements.txt', 'pyproject.toml') != ''
+        run: |
+          pip install pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f pyproject.toml ]; then pip install -e .; fi
+          pytest
